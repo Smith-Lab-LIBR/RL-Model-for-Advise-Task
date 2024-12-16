@@ -1,54 +1,49 @@
 function res = get_preprocessed_data(subject, input_folder_path)
-    % flag to check if the file has practice effects
+
+    % Initialize has_practice_effects to false
     has_practice_effects = false;
-    % read all the data from the input folder
+    % Manipulate Data
     directory = dir(input_folder_path);
-    % Sort those files by date
+    % Sort by date
     dates = datetime({directory.date}, 'InputFormat', 'dd-MMM-yyyy HH:mm:ss');
     [~, sorted_indices] = sort(dates);
     sorted_directory = directory(sorted_indices);
-    % filter the files that contain the subject id
+
     index_array = find(arrayfun(@(n) contains(sorted_directory(n).name, ['active_trust_' subject]), 1:numel(sorted_directory)));
-    % if there are multiple files with the subject id, print a warning
     if length(index_array) > 1
         disp("WARNING, MULTIPLE BEHAVIORAL FILES FOUND FOR THIS ID. USING THE FIRST FULL ONE")
     end
+
     file = '';
     for k = 1:length(index_array)
-        % read the file
         file_index = index_array(k);
         file = [input_folder_path '/' sorted_directory(file_index).name];
+
         subdat = readtable(file);
         if strcmp(class(subdat.trial), 'cell')
             subdat.trial = str2double(subdat.trial);
         end
-        % check if the file has practice effects by checking if it has a trial type MAIN and the max trial is not 359
-        if any(cellfun(@(x) isequal(x, 'MAIN'), subdat.trial_type)) && (max(subdat.trial) == 359)
+
+        if any(cellfun(@(x) isequal(x, 'MAIN'), subdat.trial_type)) && (max(subdat.trial) ~= 359)
             has_practice_effects = true;
         end
 
         if max(subdat.trial) ~= 359
             continue;
         end
-    end
-
-    if has_practice_effects
 
         subdat = subdat(max(find(ismember(subdat.trial_type, 'MAIN'))) + 1:end, :);
         compressed = subdat(subdat.event_type == 4, :);
         
-        % read all the responses from the file
         response_table = subdat(subdat.event_type == 8, :);
         [~, idx] = unique(response_table.trial, 'first');
         response_table = response_table(idx, :);
         response = response_table.response;
 
-        % read all the rewards from the file
         reward_table = subdat(subdat.event_type == 9 & ~(strcmp(subdat.result, "try left") | strcmp(subdat.result, "try right")), :);
         reward = reward_table.result;
         reward = cellfun(@str2double, reward, 'UniformOutput', false);
 
-        % read all the advices from the file
         advice_flags = subdat.event_type == 9 & (strcmp(subdat.result, "try left") | strcmp(subdat.result, "try right"));
         advice_idxs = subdat.trial(advice_flags) + 1;
         advices = subdat.result(advice_flags);
@@ -77,7 +72,7 @@ function res = get_preprocessed_data(subject, input_folder_path)
         state_map = struct('start', 1,'left',2,'right',3, 'lose', 4,'win', 5,  'advise_lose', 6, 'advise_win', 7);
         action_map = struct('left',1, 'right', 2, 'advise', 3);
 
-        % Loop through each trial making up the final results
+        % Loop through each trial
         for i = 1:length(response)
             % Initialize states and actions for each trial
             states = [state_map.start];
@@ -132,9 +127,6 @@ function res = get_preprocessed_data(subject, input_folder_path)
             res(i).rewards = rewards;
             res(i).party_size = party_size;
         end
-    else
-        % if the file does not have practice effects, return an empty array
-        res = [];
 
     end
 

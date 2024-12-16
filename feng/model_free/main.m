@@ -22,7 +22,6 @@ else
 end
 
 
-
 % SWITCHES
 % True -> Generate simulated behavior
 SIM = false;
@@ -40,8 +39,6 @@ PLOT = false;
 if ON_CLUSTER
     PLOT = getenv('PLOT');
 end 
-
-
 
 % SETTINGS
 % Subject identifier for the test or experiment, if on cluster read from ENV var
@@ -89,6 +86,13 @@ if ON_CLUSTER
     IDX_CANDIDATE = str2double(env_value);
 end
 
+% IS_CONNECTED:
+% This will define if the left option change will connectely change the right option 
+IS_CONNECTED = true;
+if ON_CLUSTER
+    IS_CONNECTED = getenv('IS_CONNECTED');
+end
+
 
 % Display all settings and switches
 disp('--- Settings and Switches ---');
@@ -102,6 +106,7 @@ disp(['RES_PATH (Results Path): ', RES_PATH]);
 disp(['INPUT_PATH (Input Path): ', INPUT_PATH]);
 disp(['Environment System: ', env_sys]);
 disp(['IDX_CANDIDATE: ', num2str(IDX_CANDIDATE)]);
+disp(['IS_CONNECTED: ', num2str(IS_CONNECTED)]);
 disp('-----------------------------');
 
 % Add external paths depending on the system
@@ -126,76 +131,141 @@ addpath(spmDemPath);
 addpath(tutorialPath);
 
 
+% Define the parameters for the model, both fixed and free
+% left_better: if left is better than right, according to p_right in AInf Code
+% advise_truthness: the probability of the advice being truthful, according to p_a in AInf Code
+% inv_temp: inverse temperature
+% outcome_sensitivity: sensitivity to outcome, used while initializing the Q table
+% large_loss_sensitive: sensitivity to large loss(large party block), used while initializing the Q table
+
+% forgetting_rate: forgetting rate for all unchosen actions
+% learning_rate: learning rate for all chosen actions
+
+% with_advice_learning_rate: learning rate for all chosen actions with advice, has to be used with without_advice_learning_rate
+% without_advice_learning_rate: learning rate for all chosen actions without advice, has to be used with with_advice_learning_rate
+
+% with_adive_win_learning_rate: learning rate for win trials with advice, has to be used with with_advice_loss_learning_rate, without_advice_win_learning_rate, without_advice_loss_learning_rate
+% with_advice_loss_learning_rate: learning rate for lose trials with advice, has to be used with with_adive_win_learning_rate, without_advice_win_learning_rate, without_advice_loss_learning_rate
+% without_advice_win_learning_rate: learning rate for win trials without advice, has to be used with with_adive_win_learning_rate, with_advice_loss_learning_rate, without_advice_loss_learning_rate
+% without_advice_loss_learning_rate: learning rate for lose trials without advice, has to be used with with_adive_win_learning_rate, with_advice_loss_learning_rate, without_advice_win_learning_rate
+
+% with_advise_forgetting_rate: forgetting rate for all unchosen actions with advice, has to be used with without_advise_forgetting_rate
+% without_advise_forgetting_rate: forgetting rate for all unchosen actions without advice, has to be used with with_advise_forgetting_rate
+
+% with_advice_win_forgetting_rate: forgetting rate for win trials with advice, has to be used with with_advice_loss_forgetting_rate, without_advice_win_forgetting_rate, without_advice_loss_forgetting_rate
+% with_advice_loss_forgetting_rate: forgetting rate for lose trials with advice, has to be used with with_advice_win_forgetting_rate, without_advice_win_forgetting_rate, without_advice_loss_forgetting_rate
+% without_advice_win_forgetting_rate: forgetting rate for win trials without advice, has to be used with with_advice_win_forgetting_rate, with_advice_loss_forgetting_rate, without_advice_loss_forgetting_rate
+% without_advice_loss_forgetting_rate: forgetting rate for lose trials without advice, has to be used with with_advice_win_forgetting_rate, with_advice_loss_forgetting_rate, without_advice_win_forgetting_rate
+
+% discount_factor: discount factor for future rewards, fixed to 1
+
 all_params = struct(...
-    'lr', 0.5, ...
-    'inv_temp', 0.5, ...
-    'discount_factor', 0.1, ...
-    'l_loss_value', 1);
+    'left_better', 0.5, ...
+    'advise_truthness', 0.8, ...
+    'inv_temp', 4, ...
+    'outcome_sensitivity',4, ...
+    'large_loss_sensitive', 8, ...
+    'forgetting_rate', 0.2, ...
+    'learning_rate', 0.5, ...
+    'with_advice_learning_rate', 0.5, ...
+    'without_advice_learning_rate', 0.5, ...
+    'with_adive_win_learning_rate', 0.5, ...
+    'with_advice_loss_learning_rate', 0.5, ...
+    'without_advice_win_learning_rate', 0.5, ...
+    'without_advice_loss_learning_rate', 0.5, ...
+    'with_advise_forgetting_rate', 0.2, ...
+    'without_advise_forgetting_rate', 0.2, ...
+    'with_advice_win_forgetting_rate', 0.2, ...
+    'with_advice_loss_forgetting_rate', 0.2, ...
+    'without_advice_win_forgetting_rate', 0.2, ...
+    'without_advice_loss_forgetting_rate', 0.2, ...
+    'discount_factor', 1 ...
+    );
 
+% all the parameters need to be transformed into [0,1]
+zero_one_fields = {'left_better','advise_truthness','learning_rate','with_advice_learning_rate','without_advice_learning_rate','with_advice_win_learning_rate','with_advice_loss_learning_rate',...
+    'without_advice_win_learning_rate','without_advice_loss_learning_rate','forgetting_rate','with_advice_forgetting_rate','without_advice_forgetting_rate',...
+    'with_advice_win_forgetting_rate','with_advice_loss_forgetting_rate','without_advice_win_forgetting_rate','without_advice_loss_forgetting_rate','discount_factor'};
+% all the parameters need to be transformed into positive values, logit transformation
+% todo: the range of discount factor is [0,1] or [0,inf]?
+positive_fields = {'inv_temp','outcome_sensitivity',...
+    };
 
-% Define an array of 10 field combinations (cell arrays)
-all_fields = {
-    {'lr', 'inv_temp', 'discount_factor'}, ...
-    {'lr', 'inv_temp', 'discount_factor', 'reward_value'}, ...
-
+% for 10 candidates, we have 10 different fields settings, _fields is for free parameters, fix_fields is for fixed parameters
+fit_fields = {
+    {'inv_temp','outcome_sensitivity','large_loss_sensitive'}, ...
+    {'inv_temp','outcome_sensitivity','large_loss_sensitive','forgetting_rate'}, ...
+    {'inv_temp','outcome_sensitivity','large_loss_sensitive','forgetting_rate','learning_rate'}, ...
+    {'inv_temp','outcome_sensitivity','large_loss_sensitive','forgetting_rate','with_advice_learning_rate','without_advice_learning_rate'}, ...
+    {'inv_temp','outcome_sensitivity','large_loss_sensitive','forgetting_rate','with_advice_learning_rate','without_advice_win_learning_rate','without_advice_loss_learning_rate'}, ...
+    {'inv_temp','outcome_sensitivity','large_loss_sensitive','forgetting_rate','with_advice_win_learning_rate','with_advice_loss_learning_rate','without_advice_learning_rate'}, ...
+    {'inv_temp','outcome_sensitivity','large_loss_sensitive','with_advice_win_forgetting_rate','with_advice_loss_forgetting_rate','without_advice_win_forgetting_rate','without_advice_loss_forgetting_rate'}, ...
+    {'inv_temp','outcome_sensitivity','large_loss_sensitive','with_advice_forgetting_rate','without_advice_win_forgetting_rate','without_advice_loss_forgetting_rate'}, ...
+    {'inv_temp','outcome_sensitivity','large_loss_sensitive','with_advice_win_forgetting_rate','with_advice_loss_forgetting_rate','without_advice_forgetting_rate'}, ...
+    {'inv_temp','outcome_sensitivity','large_loss_sensitive','with_advice_win_forgetting_rate','with_advice_loss_forgetting_rate','without_advice_win_forgetting_rate','without_advice_loss_forgetting_rate','learning_rate'}, ...
+};
+fix_fields ={
+    {'left_better','advise_truthness','learning_rate','forgetting_rate','discount_factor'}, ...
+    {'left_better','advise_truthness','learning_rate','discount_factor'}, ...
+    {'left_better','advise_truthness','discount_factor'}, ...
+    {'left_better','advise_truthness','discount_factor'}, ...
+    {'left_better','advise_truthness','discount_factor'}, ...
+    {'left_better','advise_truthness','discount_factor'}, ...
+    {'left_better','advise_truthness','learning_rate','discount_factor'}, ...
+    {'left_better','advise_truthness','learning_rate','discount_factor'}, ...
+    {'left_better','advise_truthness','learning_rate','discount_factor'}, ...
+    {'left_better','advise_truthness','discount_factor'}, ...
 };
 
-all_fixeds = {
-    {}, ...
-    {}, ...
-};
 
-
-field_params = all_fields{IDX_CANDIDATE}; % Retrieve the field for the given candidate
-fixed_params = all_fixeds{IDX_CANDIDATE}; % Retrieve the fixed parameters for the given candidate
+% assemble the parameters for the current candidate based on the IDX_CANDIDATE
+field_params = fit_fields{IDX_CANDIDATE}; 
 params = struct();
 fields = field_params;
 for i = 1:length(field_params)
     params.(field_params{i}) =  all_params.(field_params{i});
 end
-for i = 1:2:length(fixed_params)
-    params.(fixed_params{i}) = fixed_params{i+1};
+
+fixed_params = struct();
+for i = 1:length(fix_fields{IDX_CANDIDATE})
+    fixed_params.(fix_fields{IDX_CANDIDATE}{i}) =  all_params.(fix_fields{IDX_CANDIDATE}{i});
 end
-
-
-
 
 % Check conditions and perform actions based on FIT and SIM settings
 if FIT && ~SIM
-    % If only fitting is required
-    disp('Performing fitting only...');
-
-    % data processing
+    % data processing from the raw subject csv file
     preprocessed_data = get_preprocessed_data(FIT_SUBJECT,INPUT_PATH);
+    % if there is no valid data for this subject, end the script
+    if isempty(preprocessed_data)
+        disp('No data to fit');
+        return;
+    end
 
-    % inite the Q table, R table
-    q_model = init_q_learning_model(params);
 
+    % inite the model
+    q_model = init_q_learning_model(params,all_params);
 
-
-    % start update
-    % LL = fitting_model(q_model,preprocessed_data);
-
+    % overwrite the log likelihood function function
     M.L = @(P,M,U,Y)log_likelihood_func(P, M, U, Y);
-    % variance all 0.5 for each fitted parameter, nxn sparse matrix
+    % assign the free parameters with convar maxtrix
     M.pC= q_model.con_var;
     M.pE = q_model.params; 
+    M.fixed_params = fixed_params;
     M.q_table = q_model.q_table;
-    % M.trialinfo = q_model.trialinfo;
+    M.is_connected = IS_CONNECTED;
+    % Y wont be used in the log likelihood function, so just assign it as the same as U
     U = preprocessed_data;
     Y = preprocessed_data;
+    % call the spm_nlsi_Newton function to fit the model
     [Ep, Cp, F] = spm_nlsi_Newton(M, U, Y);
 
     % transfor eP into valid range
     fields = fieldnames(Ep);
     for i = 1:length(fields)
-         % for lr and discount_factor range 0-1
          field = fields{i};
-
-         if ismember(field, {'lr','lr_advice','lr_self','lr_left','lr_right','lr_win','lr_loss','discount_factor'})
+         if ismember(field, zero_one_fields)
             Ep.(field) = 1/(1+exp(-Ep.(field)));
-        
-        elseif ismember(field, {'inv_temp'})
+        elseif ismember(field, positive_fields)
             Ep.(field) = log(1+exp(Ep.(field)));
         end
     end

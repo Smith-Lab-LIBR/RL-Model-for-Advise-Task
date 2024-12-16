@@ -1,0 +1,223 @@
+Fit
+1. inite Q table
+A Q-table is set up with columns representing actions (left, right, advise) and rows
+2. state = start, action = [left,right, advise]
+3. time the inv temp
+4. softmax to get prob of all three action [1/3, 1/3,1/3] 
+5. record the res, vs actual subject(left)--> win(+40)
+40-0
+
+6. compute the eroor between actual reward and  expected reward
+7. use error to update Q value
+
+after all the trails during fitting
+simulation --> F
+sum(log(prob)) 
+SPM based on F to adjust(decent) on the pramas
+
+
+
+[left,right, advise]
+    [1,0,0]
+                    [+40, nan, nan]
+
+
+win /loss/ advice win/advise loss, advise
++40/   -40/                               0 
+
+TDRL: 
+
+set of params
+    run trails one time
+
+    q-> sample-> action VS subject actual action
+    
+    acc and complex eval by SPM as F
+    acc: min diff between [1/3, 1/3,1/3] --> [1,0,0]
+    
+
+
+
+Simulation
+
+        action
+agent: left, rigth, left_advise_left, left_advise_right, right_advise_right,left_advise_right
+                    avg(advise_realted)
+
+
+
+
+
+
+parameter
+    inv_temp    (0, +inf)
+    learning rate (0, 1]-> logit transformation(0,1)
+    rewarad sensitivity (0,+inf)
+    forgeting rate [0,1] -> logit transformation(0,1)
+
+candidate model 1
+    free parameters:
+
+        inv_temp = 4
+        (CR) reward sensitivity = 4
+        (CL) loss sensitivity = 4
+    fixed parameters:
+        learning_rate = 1(before logit transformation)
+        fixed forgeting rate = 0
+
+candidate model 2
+    free parameters:
+        inv_temp = 4
+        (CR) reward sensitivity = 4
+        (CL) loss sensitivity = 4
+        forgeting rate = 0.2
+    fixed parameters:
+     learning rate = 1
+
+candidate model 3
+    free parameters:
+        inv_temp = 4
+        (CR) reward sensitivity = 4
+        (CL) loss sensitivity = 4
+        forgeting rate = 0.2
+        learning rate = 0.5
+    no fixed parameters
+
+candidate model 4
+    free parameters:
+        inv_temp = 4
+        (CR) reward sensitivity = 4
+        (CL) loss sensitivity = 4
+        forgeting rate = 0.2
+        learning rate for with advice = 0.5
+        learning rate for without advise = 0.5
+
+candidate model 5
+    free parameters:
+        inv_temp = 4
+        (CR) reward sensitivity = 4
+        (CL) loss sensitivity = 4
+        forgeting rate = 0.2
+        learning rate for with advice = 0.5
+        learning rate for without advise win = 0.5
+        learning rate for without advise win = 0.5
+
+
+candidate model 6
+        free parameters:
+        inv_temp = 4
+        (CR) reward sensitivity = 4
+        (CL) loss sensitivity = 4
+        forgeting rate = 0.2
+        learning rate for with advice win = 0.5
+        learning rate for with advice lsoe = 0.5
+        learning rate for without advise  = 0.5
+
+
+candidate model 7
+        free parameters:
+        inv_temp = 4
+        (CR) reward sensitivity = 4
+        (CL) loss sensitivity = 4
+        forgeting rate with advice win = 0.2
+        forgeting rate with advice lose = 0.2
+        forgeting rate without advise  = 0.2
+        forgeting rate without advise  = 0.2
+        
+        fixed parameters:
+        learning rate  = 0.5
+        
+
+candidate model 8
+        free parameters:
+        inv_temp = 4
+        (CR) reward sensitivity = 4
+        (CL) loss sensitivity = 4
+        forgeting rate with advice = 0.2
+        forgeting rate without advise win = 0.2
+        forgeting rate without advise lose = 0.2
+
+        fixed parameters:
+        learning rate= 0.5
+
+candidate model 9
+      free parameters:
+        inv_temp = 4
+        (CR) reward sensitivity = 4
+        (CL) loss sensitivity = 4
+        forgeting rate without advice = 0.2
+        forgeting rate with advise win = 0.2
+        forgeting rate with advise lose = 0.2
+
+        fixed parameters:
+        learning rate  = 0.5
+
+
+candidate model 10
+      free parameters:
+        inv_temp = 4
+        (CR) reward sensitivity = 4
+        (CL) loss sensitivity = 4
+        forgeting rate with advice win = 0.2
+        forgeting rate with advice lose = 0.2
+        forgeting rate without advise win = 0.2
+        forgeting rate without advise lose = 0.2
+        learning rate  = 0.5
+
+        
+        
+
+
+
+
+
+
+left
+
+right
+
+                        chose left(Q_al_l)
+        advise_left
+                        chose right
+advice(q_advise)                    
+                        chose left
+        advise_right
+                        chose right(Q_ar_r)
+
+
+intit
+Q_ar_r == Q_al_l == q_advise
+
+update
+only make sure
+Q_ar_r == Q_al_l 
+Q_ar_l == Q_al_r 
+
+exclude the assuption that 
+    the advisor possible to give trutful advice on left than right
+    
+
+
+advise, advise left, left, win 
+
+right:
+        direct left
+        advise
+
+left:
+        direct right
+        advise
+
+
+advise left, left:
+        advise left, right
+
+advise left, right:
+        advise left, left
+        
+
+
+
+
+
+
