@@ -1,0 +1,35 @@
+#!/bin/bash
+#
+#SBATCH --partition=c3
+#SBATCH --ntasks=1
+#SBATCH --mem=3000
+#SBATCH --nodes=1
+#SBATCH --begin=now
+#SBATCH --chdir=/media/labs/rsmith/lab-members/fli/advise_task/RL-Model-for-Advise-Task/feng/uni_model
+#SBATCH --time=1:30:00
+#################################################
+
+F_TABLE_PATH_1=$1
+export F_TABLE_PATH_1
+
+F_TABLE_PATH_2=$2
+export F_TABLE_PATH_2
+
+MODLE_NAME_1=$3
+export MODLE_NAME_1
+
+MODLE_NAME_2=$4
+export MODLE_NAME_2
+
+AUTHOR_NAME_1=$5
+export AUTHOR_NAME_1
+
+AUTHOR_NAME_2=$6
+export AUTHOR_NAME_2
+
+OUTPUT_PATH=$7
+export OUTPUT_PATH
+
+module load matlab/2022a
+run_file='/media/labs/rsmith/lab-members/fli/advise_task/RL-Model-for-Advise-Task/feng/uni_model/uni_bms.m'
+matlab -nodisplay -nosplash < ${run_file}

@@ -1,4 +1,4 @@
-function [fit_results, DCM] = Advice_fit_prolificTT(subject,folder,params,field, plot)
+function [fit_results, DCM] = Advice_fit_prolificTT(subject,folder,params,field, plot, model, OMEGAPOSINEGA, MODELBASED)
 % initialize has_practice_effects to false, tracking if this participant's
 % first complete behavioral file came after they played the task a little
 % bit
@@ -168,7 +168,7 @@ actualrewards = actualrewards(:).'; % Reshape into a row
 
 
 
-        DCM        = advice_inversionTT(DCM);   % Invert the model
+        DCM        = advice_inversionTT(DCM, model, OMEGAPOSINEGA, MODELBASED);   % Invert the model
         break;
 end
      %% 6.3 Check deviation of prior and posterior means & posterior covariance:
@@ -183,10 +183,10 @@ end
             field = fields{i};
             if ismember(field, {'p_right', 'p_a', 'eta', 'omega', 'eta_a_win', 'omega_a_win',...
                     'eta_a','omega_a','eta_d','omega_d','eta_a_loss','omega_a_loss','eta_d_win',...
-                    'omega_d_win', 'eta_d_loss', 'omega_d_loss'})
+                    'omega_d_win', 'eta_d_loss', 'omega_d_loss', 'omega_d_posi', 'omega_d_nega', 'omega_a_posi', 'omega_a_nega', 'lamgda'})
                 params.(field) = 1/(1+exp(-DCM.Ep.(field)));
             elseif ismember(field, {'inv_temp', 'reward_value', 'l_loss_value', 'state_exploration',...
-                    'parameter_exploration'})
+                    'parameter_exploration', 'Rsensitivity'})
                 params.(field) = exp(DCM.Ep.(field));
             else
                 params.(field) = DCM.Ep.(field);
@@ -195,8 +195,8 @@ end
 
 
 
-        % Simulate beliefs using fitted values to get avg action prob
         all_MDPs = [];
+        %all_MDPs_simmed = [];
 
         % Simulate beliefs using fitted values
         act_prob_time1=[];
@@ -218,7 +218,7 @@ end
         end
 
         trialinfo = DCM.M.trialinfo;
-
+        L = 0;
 
         % Each block is separate -- effectively resetting beliefs at the start of
         % each block. 
@@ -258,17 +258,36 @@ end
 
              %MDPs  = spm_MDP_VB_X_advice(MDP); 
              %MDPs  = spm_MDP_VB_X_advice_no_message_passing(MDP); 
-             % MDPs  = spm_MDP_VB_X_advice_no_message_passing_faster(MDP); 
+             %MDPs  = spm_MDP_VB_X_advice_no_message_passing_faster(MDP); 
              
              %task.field = fields;
-             %MDPs  = Simple_Advice_Model_TT(task, MDP, params, 0);
-             MDPs  = ModelFreeRLModel_TT(task, MDP,params, 0);
+             if model == 1
+              %MDPs  = spm_MDP_VB_X_advice_no_message_passing_faster(MDP);
+              %MDPs  = Simple_Advice_Model_TT(task, MDP, params, 0);
+              MDPs  = Simple_Formal_Advice_Model_TT(task, MDP, params, 0);
+             elseif model == 2
+              MDPs  = ModelFreeRLModelconnect_TT(task, MDP,params, 0);
+             elseif model == 3
+                 if OMEGAPOSINEGA
+                     if MODELBASED
+                         MDPs  = ModelBasedRLModeldisconnectPosiNegaForget_TT(task, MDP, params, 0);
+                     else
+                         MDPs  = ModelFreeRLModeldisconnectPosiNegaForget_TT(task, MDP, params, 0);
+                     end
+                 else
+                     MDPs  = ModelFreeRLModeldisconnect_TT(task, MDP, params, 0);
+                 end
+             end
+
+             %MDPs_simmed  = ModelFreeRLModeldisconnect_TT(task, MDP,params, 1);
+             DCM.action_probs{idx_block} = MDPs.blockwise.action_probs;
 
              % bandit was chosen
              for j = 1:numel(actions)
                 if actions{j}(2,1) ~= 2
                    %act_prob_time1 = [act_prob_time1 MDPs(j).P(1,actions{j}(2,1),1)];
                    action_prob = MDPs.blockwise.action_probs(actions{j}(2,1)-1,1,j);
+                   L = L + log(action_prob + eps);
                    act_prob_time1 = [act_prob_time1 action_prob]; 
 %                    if MDPs(j).P(1,actions{j}(2,1),1)==max(MDPs(j).P(:,:,1))
 %                        model_acc_time1 = [model_acc_time1 1];
@@ -282,8 +301,10 @@ end
                     end
 
                 else % when advisor was chosen
-                   prob_choose_advisor = MDPs.blockwise.action_probs(1,1,j); 
-                   prob_choose_bandit = MDPs.blockwise.action_probs(actions{j}(2,2)-1,2,j); 
+                   prob_choose_advisor = MDPs.blockwise.action_probs(1,1,j);
+                   L = L + log(prob_choose_advisor + eps);
+                   prob_choose_bandit = MDPs.blockwise.action_probs(actions{j}(2,2)-1,2,j);
+                   L = L + log(prob_choose_bandit + eps);
                    act_prob_time1 = [act_prob_time1 prob_choose_advisor];
                    act_prob_time2 = [act_prob_time2 prob_choose_bandit];
                    
@@ -319,10 +340,15 @@ end
              end
             % Save block of MDPs to list of all MDPs
              all_MDPs = [all_MDPs; MDPs'];
+            %all_MDPs_simmed = [all_MDPs_simmed; MDPs_simmed'];
 
             clear MDPs
 
         end
+
+        %FinalResults = advise_sim_fitTT(all_MDPs_simmed, field, priors)
+
+
         % plotting
         if plot
             % for each trial
@@ -339,7 +365,7 @@ end
                 trial_action_probs = vertcat(zero_row, trial_action_probs)';
                 MDP(i).P = permute(trial_action_probs, [3 2 1]);
             end
-            advise_plot_cmg(MDP);
+            advise_plot_tt(MDP);
 
         end
          
@@ -366,6 +392,7 @@ end
         fit_results.avg_act_prob_time2 = sum(act_prob_time2)/length(act_prob_time2);
         fit_results.avg_model_acc_time1   = sum(model_acc_time1)/length(model_acc_time1);
         fit_results.avg_model_acc_time2   = sum(model_acc_time2)/length(model_acc_time2);
-        fit_results.times_chosen_advisor = length(model_acc_time2);
+        %fit_results.times_chosen_advisor = length(model_acc_time2);
+        fit_results.LL = L;
            
 end

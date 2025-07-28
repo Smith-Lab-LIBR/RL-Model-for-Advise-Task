@@ -2,6 +2,11 @@
 /inputs/
 /results/
 /Active-Inference-Tutorial-Scripts-main/
-
+/outputs
+/.idea
 .DS_Store
 *.asv
+/bms/
+/criteria/*.pickle
+with_without_log.py
+/DataSink/

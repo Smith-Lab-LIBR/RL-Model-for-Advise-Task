@@ -1,6 +1,6 @@
 % Samuel Taylor and Ryan Smith, 2021
 % Model inversion script
-function [DCM] = advice_inversionTT(DCM)
+function [DCM] = advice_inversionTT(DCM, model, OMEGAPOSINEGA, MODELBASED)
 
 % MDP inversion using Variational Bayes
 % FORMAT [DCM] = spm_dcm_mdp(DCM)
@@ -61,11 +61,11 @@ for i = 1:length(DCM.field)
         % transform the parameters that we fit
         if ismember(field, {'p_right', 'p_a', 'eta', 'omega', 'eta_a_win', 'omega_a_win',...
                 'eta_a','omega_a','eta_d','omega_d','eta_a_loss','omega_a_loss','eta_d_win'...
-                'omega_d_win', 'eta_d_loss', 'omega_d_loss', 'eta'})
+                'omega_d_win', 'eta_d_loss', 'omega_d_loss', 'omega_d_posi', 'omega_d_nega', 'omega_a_posi', 'omega_a_nega', 'lamgda'})
             pE.(field) = log(DCM.params.(field)/(1-DCM.params.(field)));  % bound between 0 and 1
             pC{i,i}    = prior_variance;
         elseif ismember(field, {'inv_temp', 'reward_value', 'l_loss_value', 'state_exploration',...
-                'parameter_exploration', })
+                'parameter_exploration', 'Rsensitivity'})
             pE.(field) = log(DCM.params.(field));               % in log-space (to keep positive)
             pC{i,i}    = prior_variance;  
         else
@@ -79,6 +79,9 @@ pC      = spm_cat(pC);
 
 % model specification
 %--------------------------------------------------------------------------
+M.model = model;
+M.OMEGAPOSINEGA = OMEGAPOSINEGA;
+M.MODELBASED = MODELBASED;
 M.L     = @(P,M,U,Y)spm_mdp_L(P,M,U,Y);  % log-likelihood function
 M.pE    = pE;                            % prior means (parameters)
 M.pC    = pC;                            % prior variance (parameters)
@@ -122,10 +125,10 @@ for i = 1:length(fields)
     field = fields{i};
     if ismember(field, {'p_right', 'p_a', 'eta', 'omega', 'eta_a_win', 'omega_a_win',...
             'eta_a','omega_a','eta_d','omega_d','eta_a_loss','omega_a_loss','eta_d_win'...
-            'omega_d_win', 'eta_d_loss', 'omega_d_loss'})
+            'omega_d_win', 'eta_d_loss', 'omega_d_loss', 'omega_d_posi', 'omega_d_nega', 'omega_a_posi', 'omega_a_nega', 'lamgda'})
         params.(field) = 1/(1+exp(-P.(field)));
     elseif ismember(field, {'inv_temp', 'reward_value', 'l_loss_value', 'state_exploration',...
-            'parameter_exploration', })
+            'parameter_exploration', 'Rsensitivity'})
         params.(field) = exp(P.(field));
     else
         params.(field) = P.(field);
@@ -196,8 +199,25 @@ for idx_block = 1:num_blocks
     %MDP  = spm_MDP_VB_X_advice(MDP);
     %MDP  = spm_MDP_VB_X_advice_no_message_passing_faster(MDP);
     task.field = fields;
-%    MDP  = Simple_Advice_Model_TT(task, MDP,params, 0);
-    MDP  = ModelFreeRLModel_TT(task, MDP,params, 0);
+
+    if M.model == 1
+     %MDP  = spm_MDP_VB_X_advice_no_message_passing_faster(MDP);
+     %MDP  = Simple_Advice_Model_TT(task, MDP,params, 0);
+     MDP  = Simple_Formal_Advice_Model_TT(task, MDP,params, 0);
+    elseif M.model == 2
+     MDP  = ModelFreeRLModelconnect_TT(task, MDP,params, 0);
+    elseif M.model == 3
+        if M.OMEGAPOSINEGA
+            if M.MODELBASED
+                MDP  = ModelBasedRLModeldisconnectPosiNegaForget_TT(task, MDP, params, 0);
+            else
+                MDP  = ModelFreeRLModeldisconnectPosiNegaForget_TT(task, MDP, params, 0);
+            end
+        else
+            MDP  = ModelFreeRLModeldisconnect_TT(task, MDP, params, 0);
+        end
+    end
+
 
     for j = 1:block_size
         if actions{j}(2,1) ~= 2
